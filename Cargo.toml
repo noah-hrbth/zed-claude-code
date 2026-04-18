@@ -1,0 +1,40 @@
+[package]
+name = "zcc"
+version = "0.1.0"
+edition = "2021"
+description = "Zed <-> Claude Code integration: send editor selection to Claude Code via /ide"
+license = "MIT"
+repository = "https://github.com/noahharborth/zed-claude-code"
+readme = "README.md"
+
+[[bin]]
+name = "zcc"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "time", "sync", "signal", "process", "fs"] }
+tokio-tungstenite = "0.26"
+futures-util = "0.3"
+tungstenite = "0.26"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+json5 = "0.4"
+clap = { version = "4", features = ["derive"] }
+anyhow = "1"
+thiserror = "2"
+nix = { version = "0.29", features = ["process", "signal", "fs"] }
+uuid = { version = "1", features = ["v4"] }
+sha2 = "0.10"
+hex = "0.4"
+libc = "0.2"
+dirs = "5"
+chrono = { version = "0.4", features = ["serde"] }
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1", features = ["test-util"] }
+
+[profile.release]
+strip = true
+lto = "thin"
+codegen-units = 1
