@@ -12,7 +12,12 @@ pub fn run() -> Result<()> {
     fs::create_dir_all(&zed.config_dir)
         .with_context(|| format!("create {}", zed.config_dir.display()))?;
     patch_file(&zed.tasks, &zcc_task(), is_zcc_task, "tasks.json")?;
-    patch_file_multi(&zed.keymap, &zcc_keymap_entries(), is_zcc_keymap_block, "keymap.json")?;
+    patch_file_multi(
+        &zed.keymap,
+        &zcc_keymap_entries(),
+        is_zcc_keymap_block,
+        "keymap.json",
+    )?;
     println!("zcc installed.");
     println!("  tasks:  {}", zed.tasks.display());
     println!("  keymap: {}", zed.keymap.display());
@@ -37,7 +42,12 @@ fn patch_file(path: &Path, entry: &Value, matches: fn(&Value) -> bool, label: &s
     write_array(path, &arr)
 }
 
-fn patch_file_multi(path: &Path, entries: &[Value], matches: fn(&Value) -> bool, label: &str) -> Result<()> {
+fn patch_file_multi(
+    path: &Path,
+    entries: &[Value],
+    matches: fn(&Value) -> bool,
+    label: &str,
+) -> Result<()> {
     backup(path)?;
     let mut arr = read_array(path, label)?;
     arr.retain(|v| !matches(v));
@@ -52,7 +62,8 @@ fn remove_from_file(path: &Path, matches: fn(&Value) -> bool) -> Result<()> {
         return Ok(());
     }
     let content = fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
-    let parsed: Value = json5::from_str(&content).with_context(|| format!("parse {}", path.display()))?;
+    let parsed: Value =
+        json5::from_str(&content).with_context(|| format!("parse {}", path.display()))?;
     let Value::Array(mut arr) = parsed else {
         return Ok(()); // not an array; don't touch
     };
@@ -88,8 +99,12 @@ fn read_array(path: &Path, label: &str) -> Result<Vec<Value>> {
     if trimmed.is_empty() {
         return Ok(Vec::new());
     }
-    let parsed: Value = json5::from_str(&content)
-        .with_context(|| format!("parse {} as JSONC (restore from {}.bak if needed)", label, label))?;
+    let parsed: Value = json5::from_str(&content).with_context(|| {
+        format!(
+            "parse {} as JSONC (restore from {}.bak if needed)",
+            label, label
+        )
+    })?;
     match parsed {
         Value::Array(a) => Ok(a),
         _ => anyhow::bail!("{} is not a JSON array (top-level must be `[...]`)", label),
@@ -172,7 +187,7 @@ pub fn is_zcc_keymap_block(v: &Value) -> bool {
     };
     if let Some(cmd_l) = bindings.get("cmd-l").and_then(|a| a.as_array()) {
         // Any "Cmd+L -> SendKeystrokes ..." we emitted:
-        if cmd_l.get(0).and_then(|s| s.as_str()) == Some("workspace::SendKeystrokes") {
+        if cmd_l.first().and_then(|s| s.as_str()) == Some("workspace::SendKeystrokes") {
             if let Some(seq) = cmd_l.get(1).and_then(|s| s.as_str()) {
                 if seq == "cmd-f18 cmd-f19 cmd-f20"
                     || seq == "cmd-f18 cmd-f19"
@@ -183,8 +198,9 @@ pub fn is_zcc_keymap_block(v: &Value) -> bool {
             }
         }
         // Earlier: Cmd+L -> task::Spawn zcc-send (direct, no rendezvous).
-        let is_task_spawn = cmd_l.get(0).and_then(|s| s.as_str()) == Some("task::Spawn")
-            && cmd_l.get(1)
+        let is_task_spawn = cmd_l.first().and_then(|s| s.as_str()) == Some("task::Spawn")
+            && cmd_l
+                .get(1)
                 .and_then(|p| p.get("task_name"))
                 .and_then(|n| n.as_str())
                 == Some("zcc-send");
@@ -210,6 +226,7 @@ pub fn is_zcc_keymap_block(v: &Value) -> bool {
     }
     // Legacy rendezvous target: cmd-f19 + cmd-f20 both in one block.
     let has_f19 = bindings.get("cmd-f19").is_some();
-    let has_f20 = bindings.get("cmd-f20").and_then(|v| v.as_str()) == Some("terminal_panel::ToggleFocus");
+    let has_f20 =
+        bindings.get("cmd-f20").and_then(|v| v.as_str()) == Some("terminal_panel::ToggleFocus");
     has_f19 && has_f20
 }

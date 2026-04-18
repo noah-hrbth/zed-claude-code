@@ -9,7 +9,7 @@ Works for every project and every Zed window after a one-time install.
 ## Install
 
 ```sh
-brew install noahharborth/zcc/zcc
+brew install noah-hrbth/zcc/zcc
 zcc install
 ```
 

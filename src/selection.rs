@@ -18,7 +18,10 @@ pub struct LineRange {
 pub fn derive(file_content: &str, selection: &str, cursor_row: u32) -> LineRange {
     let trimmed_sel = selection;
     if trimmed_sel.is_empty() {
-        return LineRange { start: cursor_row, end: cursor_row };
+        return LineRange {
+            start: cursor_row,
+            end: cursor_row,
+        };
     }
 
     let newlines_in_sel = trimmed_sel.chars().filter(|c| *c == '\n').count() as u32;
@@ -36,12 +39,17 @@ pub fn derive(file_content: &str, selection: &str, cursor_row: u32) -> LineRange
 
 /// Convenience entry point that reads the file from disk.
 pub fn derive_from_path(path: &Path, selection: &str, cursor_row: u32) -> Result<LineRange> {
-    let content = std::fs::read_to_string(path)
-        .with_context(|| format!("read {}", path.display()))?;
+    let content =
+        std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
     Ok(derive(&content, selection, cursor_row))
 }
 
-fn search_in_file(content: &str, needle: &str, cursor_row: u32, span_lines: u32) -> Option<LineRange> {
+fn search_in_file(
+    content: &str,
+    needle: &str,
+    cursor_row: u32,
+    span_lines: u32,
+) -> Option<LineRange> {
     let lines: Vec<&str> = content.split_inclusive('\n').collect();
     let mut matches: Vec<LineRange> = Vec::new();
 
@@ -66,7 +74,10 @@ fn search_in_file(content: &str, needle: &str, cursor_row: u32, span_lines: u32)
             if content[candidate_start..].starts_with(needle) {
                 let start_line = (line_idx + 1) as u32;
                 let end_line = start_line + span_lines - 1;
-                matches.push(LineRange { start: start_line, end: end_line });
+                matches.push(LineRange {
+                    start: start_line,
+                    end: end_line,
+                });
             }
         }
         byte_pos += line.len();

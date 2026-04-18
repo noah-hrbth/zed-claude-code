@@ -17,6 +17,7 @@ pub struct Incoming {
     #[serde(default)]
     pub method: Option<String>,
     #[serde(default)]
+    #[allow(dead_code)]
     pub params: Option<Value>,
 }
 

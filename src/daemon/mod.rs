@@ -55,8 +55,13 @@ pub async fn run(worktree: PathBuf) -> Result<()> {
     });
 
     let lockfile_path = lockfile::write(port, &worktree, &auth_token)?;
-    log_info!(SUB, "daemon listening port={} worktree={} lockfile={}",
-        port, worktree.display(), lockfile_path.display());
+    log_info!(
+        SUB,
+        "daemon listening port={} worktree={} lockfile={}",
+        port,
+        worktree.display(),
+        lockfile_path.display()
+    );
 
     let ipc_path = crate::util::ipc_socket_path(&worktree)?;
     let ipc_state = Arc::clone(&state);

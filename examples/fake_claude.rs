@@ -32,10 +32,8 @@ async fn main() -> anyhow::Result<()> {
     println!("connecting to {url} with token {}...", &lf.auth_token[..8]);
 
     let mut req = url.into_client_request()?;
-    req.headers_mut().insert(
-        "x-claude-code-ide-authorization",
-        lf.auth_token.parse()?,
-    );
+    req.headers_mut()
+        .insert("x-claude-code-ide-authorization", lf.auth_token.parse()?);
 
     let (ws, resp) = tokio_tungstenite::connect_async(req).await?;
     println!("connected. status={}", resp.status());
@@ -67,11 +65,16 @@ async fn main() -> anyhow::Result<()> {
                 Message::Text(t) => {
                     println!("<- {}", t);
                     got += 1;
-                    if got >= 2 { break; }
+                    if got >= 2 {
+                        break;
+                    }
                 }
                 Message::Ping(p) => println!("<- ping({} bytes)", p.len()),
                 Message::Pong(_) => println!("<- pong"),
-                Message::Close(_) => { println!("<- close"); break; }
+                Message::Close(_) => {
+                    println!("<- close");
+                    break;
+                }
                 other => println!("<- (other: {:?})", other),
             }
         }
@@ -87,7 +90,7 @@ async fn main() -> anyhow::Result<()> {
             }
             msg = rx.next() => {
                 match msg {
-                    Some(Ok(Message::Ping(p))) => println!("  received ping at {i}s"),
+                    Some(Ok(Message::Ping(_))) => println!("  received ping at {i}s"),
                     Some(Ok(Message::Close(_))) | None => {
                         anyhow::bail!("connection closed at {}s — handshake fix not working", i);
                     }

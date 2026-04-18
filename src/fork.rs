@@ -35,7 +35,10 @@ fn intermediate(worktree: PathBuf) -> ! {
 fn run_daemon(worktree: PathBuf) -> ! {
     redirect_stdio_to_null();
     let _ = crate::logging::init("daemon");
-    let rt = match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
+    let rt = match tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+    {
         Ok(rt) => rt,
         Err(err) => {
             crate::logging::log("error", "daemon", format!("runtime build failed: {err}"));

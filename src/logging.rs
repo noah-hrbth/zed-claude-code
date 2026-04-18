@@ -32,7 +32,9 @@ pub fn log(level: &str, subcommand: &str, msg: impl std::fmt::Display) {
     let _ = std::fs::create_dir_all(path.parent().unwrap());
     let _guard = lock().lock();
     rotate_if_needed(&path);
-    let Ok(mut f) = OpenOptions::new().create(true).append(true).open(&path) else { return };
+    let Ok(mut f) = OpenOptions::new().create(true).append(true).open(&path) else {
+        return;
+    };
     let ts = chrono::Utc::now().to_rfc3339();
     let pid = std::process::id();
     let raw = msg.to_string();
@@ -44,13 +46,18 @@ pub fn log(level: &str, subcommand: &str, msg: impl std::fmt::Display) {
 }
 
 fn rotate_if_needed(path: &std::path::Path) {
-    let Ok(meta) = std::fs::metadata(path) else { return };
+    let Ok(meta) = std::fs::metadata(path) else {
+        return;
+    };
     if meta.len() < MAX_LOG_BYTES {
         return;
     }
     // Shift: zcc.log.2 -> delete; zcc.log.1 -> zcc.log.2; zcc.log -> zcc.log.1
     let parent = path.parent().unwrap_or(std::path::Path::new("."));
-    let base = path.file_name().and_then(|s| s.to_str()).unwrap_or("zcc.log");
+    let base = path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("zcc.log");
     let p2 = parent.join(format!("{base}.2"));
     let p1 = parent.join(format!("{base}.1"));
     let _ = std::fs::remove_file(&p2);

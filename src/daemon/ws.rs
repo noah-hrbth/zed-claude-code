@@ -36,6 +36,7 @@ pub async fn serve(listener: TcpListener, state: Arc<DaemonState>) {
 
 async fn handle(stream: TcpStream, peer: SocketAddr, state: Arc<DaemonState>) -> Result<()> {
     let expected = state.auth_token.clone();
+    #[allow(clippy::result_large_err)]
     let auth_cb = move |req: &Request, response: Response| -> Result<Response, ErrorResponse> {
         let ok = req
             .headers()

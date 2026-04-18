@@ -58,7 +58,11 @@ async fn handle(stream: tokio::net::UnixStream, state: Arc<DaemonState>) -> Resu
             continue;
         }
         let reply = match serde_json::from_str::<IpcPayload>(&line) {
-            Ok(IpcPayload::AtMentioned { file_path, line_start, line_end }) => {
+            Ok(IpcPayload::AtMentioned {
+                file_path,
+                line_start,
+                line_end,
+            }) => {
                 // IPC uses 1-indexed row numbers (matching $ZED_ROW). The Claude /ide
                 // protocol uses 0-indexed lines (per coder/claudecode.nvim reference),
                 // so convert here at the wire boundary.
@@ -79,11 +83,17 @@ async fn handle(stream: tokio::net::UnixStream, state: Arc<DaemonState>) -> Resu
                         let _ = state.tx.send(text);
                         IpcReply::Ok { clients }
                     }
-                    Err(err) => IpcReply::Err { message: format!("serialize: {err}") },
+                    Err(err) => IpcReply::Err {
+                        message: format!("serialize: {err}"),
+                    },
                 }
             }
-            Ok(IpcPayload::Ping) => IpcReply::Ok { clients: state.tx.receiver_count() },
-            Err(err) => IpcReply::Err { message: format!("parse: {err}") },
+            Ok(IpcPayload::Ping) => IpcReply::Ok {
+                clients: state.tx.receiver_count(),
+            },
+            Err(err) => IpcReply::Err {
+                message: format!("parse: {err}"),
+            },
         };
         let bytes = serde_json::to_vec(&reply)?;
         wr.write_all(&bytes).await?;

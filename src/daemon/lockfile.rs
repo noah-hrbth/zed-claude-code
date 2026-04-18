@@ -88,7 +88,9 @@ pub fn find_for_worktree(worktree: &Path) -> Result<Option<Lockfile>> {
         if !lf.workspace_folders.iter().any(|w| *w == *canonical_str) {
             continue;
         }
-        if !crate::util::pid_alive(lf.pid as i32) {
+        use nix::sys::signal;
+        use nix::unistd::Pid;
+        if signal::kill(Pid::from_raw(lf.pid as i32), None).is_err() {
             // Stale.
             let _ = fs::remove_file(entry.path());
             continue;

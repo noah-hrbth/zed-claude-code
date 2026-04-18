@@ -18,10 +18,20 @@ pub fn run(worktree: PathBuf, file: PathBuf, row: u32, selection: String) -> Res
         .with_context(|| format!("canonicalize {}", worktree.display()))?;
     let sock = crate::util::ipc_socket_path(&worktree)?;
 
-    let range = crate::selection::derive_from_path(&file, &selection, row)
-        .unwrap_or(crate::selection::LineRange { start: row, end: row });
-    log_info!(SUB, "selection file={} row={row} start={} end={} selection_len={}",
-        file.display(), range.start, range.end, selection.len());
+    let range = crate::selection::derive_from_path(&file, &selection, row).unwrap_or(
+        crate::selection::LineRange {
+            start: row,
+            end: row,
+        },
+    );
+    log_info!(
+        SUB,
+        "selection file={} row={row} start={} end={} selection_len={}",
+        file.display(),
+        range.start,
+        range.end,
+        selection.len()
+    );
 
     let payload = IpcPayload::AtMentioned {
         file_path: file.to_string_lossy().into_owned(),
@@ -32,11 +42,19 @@ pub fn run(worktree: PathBuf, file: PathBuf, row: u32, selection: String) -> Res
     // Try existing daemon first.
     if let Ok(stream) = UnixStream::connect(&sock) {
         send_payload(stream, &payload)?;
-        log_info!(SUB, "forwarded selection to existing daemon sock={}", sock.display());
+        log_info!(
+            SUB,
+            "forwarded selection to existing daemon sock={}",
+            sock.display()
+        );
         return Ok(());
     }
 
-    log_info!(SUB, "no daemon running; spawning for sock={}", sock.display());
+    log_info!(
+        SUB,
+        "no daemon running; spawning for sock={}",
+        sock.display()
+    );
     crate::fork::spawn_daemon(&worktree)?;
 
     let deadline = Instant::now() + SPAWN_BUDGET;
@@ -54,7 +72,11 @@ pub fn run(worktree: PathBuf, file: PathBuf, row: u32, selection: String) -> Res
         std::thread::sleep(SPAWN_TICK);
     };
     send_payload(stream, &payload)?;
-    log_info!(SUB, "forwarded selection to freshly spawned daemon sock={}", sock.display());
+    log_info!(
+        SUB,
+        "forwarded selection to freshly spawned daemon sock={}",
+        sock.display()
+    );
     Ok(())
 }
 

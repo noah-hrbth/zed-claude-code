@@ -60,7 +60,13 @@ fn main() -> Result<()> {
     let _ = logging::init(sub_name);
 
     match cli.command {
-        Command::Send { worktree, file, row, selection, selection_stdin } => {
+        Command::Send {
+            worktree,
+            file,
+            row,
+            selection,
+            selection_stdin,
+        } => {
             let sel = if selection_stdin {
                 use std::io::Read;
                 let mut buf = String::new();
