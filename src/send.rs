@@ -4,13 +4,10 @@ use anyhow::{Context, Result};
 use std::io::{Read, Write};
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use uuid::Uuid;
 
 const SUB: &str = "send";
-
-/// Budget for bringing up a fresh daemon on first-ever `zcc send`.
-const SPAWN_BUDGET: Duration = Duration::from_millis(1500);
-const SPAWN_TICK: Duration = Duration::from_millis(25);
 
 pub fn run(worktree: PathBuf, file: PathBuf, row: u32, selection: String) -> Result<()> {
     let worktree = worktree
@@ -39,7 +36,7 @@ pub fn run(worktree: PathBuf, file: PathBuf, row: u32, selection: String) -> Res
         line_end: range.end,
     };
 
-    // Try existing daemon first.
+    // Warm path: daemon already up, deliver synchronously and exit.
     if let Ok(stream) = UnixStream::connect(&sock) {
         send_payload(stream, &payload)?;
         log_info!(
@@ -50,33 +47,31 @@ pub fn run(worktree: PathBuf, file: PathBuf, row: u32, selection: String) -> Res
         return Ok(());
     }
 
+    // Cold path: queue the payload to disk and spawn a daemon. The daemon will
+    // drain the queue dir at startup and broadcast everything once a ws client
+    // is subscribed. We exit immediately so the Zed task tab disappears
+    // without waiting for the daemon to finish coming up.
+    enqueue(&worktree, &payload)?;
     log_info!(
         SUB,
-        "no daemon running; spawning for sock={}",
+        "no daemon running; queued payload and spawning for sock={}",
         sock.display()
     );
     crate::fork::spawn_daemon(&worktree)?;
+    Ok(())
+}
 
-    let deadline = Instant::now() + SPAWN_BUDGET;
-    let stream = loop {
-        if let Ok(stream) = UnixStream::connect(&sock) {
-            break stream;
-        }
-        if Instant::now() >= deadline {
-            anyhow::bail!(
-                "daemon failed to come up within {:?}; see {}",
-                SPAWN_BUDGET,
-                crate::logging::log_dir()?.join("zcc.log").display()
-            );
-        }
-        std::thread::sleep(SPAWN_TICK);
-    };
-    send_payload(stream, &payload)?;
-    log_info!(
-        SUB,
-        "forwarded selection to freshly spawned daemon sock={}",
-        sock.display()
-    );
+/// Persist the payload to `queue_dir(worktree)/{uuid}.json` so the freshly
+/// spawned daemon can broadcast it once it's up. One file per message keeps
+/// concurrent writers from corrupting each other.
+fn enqueue(worktree: &std::path::Path, payload: &IpcPayload) -> Result<()> {
+    let dir = crate::util::queue_dir(worktree)?;
+    std::fs::create_dir_all(&dir)
+        .with_context(|| format!("create queue dir {}", dir.display()))?;
+    let path = dir.join(format!("{}.json", Uuid::new_v4()));
+    let bytes = serde_json::to_vec(payload).context("serialize queue payload")?;
+    std::fs::write(&path, &bytes)
+        .with_context(|| format!("write queue file {}", path.display()))?;
     Ok(())
 }
 

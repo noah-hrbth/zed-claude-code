@@ -63,6 +63,20 @@ async fn handle(stream: TcpStream, peer: SocketAddr, state: Arc<DaemonState>) ->
 
     let (mut write, mut read) = ws_stream.split();
     let mut rx = state.tx.subscribe();
+
+    // Replay any pending broadcasts (from on-disk queue replay or earlier
+    // sends that arrived before any subscriber). Subscribe-then-drain order
+    // matters: subscribing first ensures that any concurrent ipc broadcast
+    // arriving while we drain still reaches us via `rx`. Re-broadcasting via
+    // `tx.send` (rather than writing directly to this client) lets any
+    // already-connected sibling clients also see the backlog.
+    {
+        let mut pending = state.pending.lock().await;
+        for msg in pending.drain(..) {
+            let _ = state.tx.send(msg);
+        }
+    }
+
     let mut ping_interval = tokio::time::interval(std::time::Duration::from_secs(30));
     ping_interval.tick().await;
 

@@ -28,12 +28,16 @@ enum Command {
         file: PathBuf,
         #[arg(long)]
         row: u32,
-        /// Selection text. If --selection-stdin is set, this is ignored and stdin is read instead.
+        /// Selection text. Used only if neither --read-clipboard nor --selection-stdin is set.
         #[arg(long, default_value = "")]
         selection: String,
-        /// Read the selection from stdin instead of --selection. Avoids shell-quoting issues.
+        /// Read the selection from stdin. Lower priority than --read-clipboard.
         #[arg(long)]
         selection_stdin: bool,
+        /// Read the selection from the system clipboard via NSPasteboard. Highest
+        /// priority — preferred over --selection-stdin and --selection.
+        #[arg(long)]
+        read_clipboard: bool,
     },
     /// Run the per-worktree WebSocket daemon. Not invoked by users directly.
     Daemon {
@@ -66,8 +70,14 @@ fn main() -> Result<()> {
             row,
             selection,
             selection_stdin,
+            read_clipboard,
         } => {
-            let sel = if selection_stdin {
+            let sel = if read_clipboard {
+                let mut cb = arboard::Clipboard::new()
+                    .map_err(|e| anyhow::anyhow!("open clipboard: {e}"))?;
+                cb.get_text()
+                    .map_err(|e| anyhow::anyhow!("read clipboard text: {e}"))?
+            } else if selection_stdin {
                 use std::io::Read;
                 let mut buf = String::new();
                 std::io::stdin().read_to_string(&mut buf)?;

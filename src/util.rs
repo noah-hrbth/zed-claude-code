@@ -22,6 +22,17 @@ pub fn ipc_socket_path(worktree: &Path) -> Result<PathBuf> {
     Ok(tmp.join(name))
 }
 
+/// Per-worktree directory holding queued payloads for the daemon to drain on
+/// startup. One file per message (uuid-named) so concurrent writers are atomic
+/// regardless of payload size.
+pub fn queue_dir(worktree: &Path) -> Result<PathBuf> {
+    let tmp = std::env::var_os("TMPDIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("/tmp"));
+    let name = format!("zcc-{}.queue", worktree_hash(worktree));
+    Ok(tmp.join(name))
+}
+
 /// Directory containing Claude Code IDE lockfiles.
 pub fn claude_ide_dir() -> Result<PathBuf> {
     if let Some(custom) = std::env::var_os("CLAUDE_CONFIG_DIR") {

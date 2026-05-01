@@ -25,3 +25,6 @@ target
 
 # Claude Code local settings
 .claude/
+
+# Release tarballs (uploaded to GitHub Releases, not tracked in git)
+dist/

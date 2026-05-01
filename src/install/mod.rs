@@ -125,13 +125,21 @@ fn write_array(path: &Path, arr: &[Value]) -> Result<()> {
 /// task). We cannot use `$ZED_SELECTED_TEXT` because Zed does not re-evaluate
 /// that variable when a task is spawned from a keybinding
 /// (upstream issue zed-industries/zed#40118).
+///
+/// Invokes `zcc` directly with `--read-clipboard` rather than going through
+/// `/bin/sh -c 'pbpaste | zcc send …'`. The shell wrapper and `pbpaste` fork
+/// added ~30–60 ms per press; reading the pasteboard in-process via NSPasteboard
+/// is materially faster.
 pub fn zcc_task() -> Value {
     json!({
         "label": "zcc-send",
-        "command": "/bin/sh",
+        "command": "zcc",
         "args": [
-            "-c",
-            "/usr/bin/pbpaste | zcc send --worktree \"$ZED_WORKTREE_ROOT\" --file \"$ZED_FILE\" --row \"$ZED_ROW\" --selection-stdin"
+            "send",
+            "--read-clipboard",
+            "--worktree", "$ZED_WORKTREE_ROOT",
+            "--file", "$ZED_FILE",
+            "--row", "$ZED_ROW"
         ],
         "use_new_terminal": false,
         "allow_concurrent_runs": true,
@@ -150,7 +158,8 @@ pub fn zcc_task() -> Value {
 /// The indirection exists because Zed keybindings have no action-array syntax
 /// AND task::Spawn from a keybinding does not re-capture $ZED_SELECTED_TEXT
 /// (upstream issue zed-industries/zed#40118). The synthetic Cmd+C puts the
-/// selection on the system clipboard, which the task then reads via pbpaste.
+/// selection on the system clipboard, which `zcc send --read-clipboard` reads
+/// in-process via NSPasteboard.
 /// F18/F19 are Editor-scoped so the copy + spawn only fire when an editor has
 /// focus. F20 is global so the terminal focus shift works from any context.
 /// These are unused private-use keys chosen to minimise conflict risk.

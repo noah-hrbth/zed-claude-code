@@ -59,11 +59,13 @@ Zed editor — Cmd+L
             ├─► cmd-f18 ─► editor::Copy                    (selection → clipboard)
             ├─► cmd-f19 ─► task::Spawn "zcc-send"
             │                 ▼
-            │             /bin/sh -c 'pbpaste | zcc send ...'
+            │             zcc send --read-clipboard ...      (in-process NSPasteboard)
             │                 ▼
-            │             unix socket $TMPDIR/zcc-<hash>.sock
+            │             warm: unix socket $TMPDIR/zcc-<hash>.sock
+            │             cold: $TMPDIR/zcc-<hash>.queue/{uuid}.json + spawn daemon, exit
             │                 ▼
             │             zcc daemon (per worktree, double-forked on demand)
+            │             — drains queue dir on startup, replays via broadcast
             │                 ▼
             │             ws://127.0.0.1:<port>/   ◄── Claude Code CLI (/ide)
             │             ~/.claude/ide/<port>.lock   ──► at_mentioned JSON-RPC
@@ -80,7 +82,7 @@ F18/F19/F20 are unused private-use keys, used as a rendezvous so a single Cmd+L 
 - **macOS only.** Linux / Windows later.
 - **Clipboard is overwritten by Cmd+L.** The keybinding synthesizes a Cmd+C to capture the selection; your previous clipboard contents are replaced. Required workaround for Zed issue #40118.
 - **Vim visual-mode selections are not captured.** Zed's native clipboard copy only fires for native selections — use `Shift+Arrow` or mouse drag to select, not vim `v`/`V`. Tracked for v2.
-- **Brief task-tab flash.** A terminal tab flashes next to the Claude tab on every Cmd+L. Cannot be eliminated — Zed's `task::Spawn` unconditionally creates a terminal pane, with no "silent exec" action in the codebase. Keeping the terminal panel open minimises the visible flash.
+- **Brief task-tab blip.** A terminal tab appears next to the Claude tab on every Cmd+L for ~150–300 ms (Zed's `task::Spawn` unconditionally creates a terminal pane, with no "silent exec" action in the codebase). The blip is bounded by Zed's tab create/teardown animation plus the `zcc` binary launch — not by daemon readiness or message delivery. Keeping the terminal panel open further minimises the visible blip.
 - **Run `/ide` once per Claude session.** The WebSocket port is per-worktree and not known when Zed starts, so we don't set `CLAUDE_CODE_SSE_PORT` — Claude discovers the lockfile on `/ide`.
 - **Config comments not preserved.** `zcc install` re-emits `tasks.json` / `keymap.json` without your comments. Your original is kept at `*.bak`.
 

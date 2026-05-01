@@ -1,8 +1,7 @@
 use crate::daemon::{AtMentioned, DaemonState, JsonRpcNotification};
 use crate::{log_info, log_warn};
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixListener;
@@ -28,11 +27,41 @@ pub enum IpcReply {
     Err { message: String },
 }
 
-pub async fn serve(socket: PathBuf, state: Arc<DaemonState>) -> Result<()> {
-    let _ = tokio::fs::remove_file(&socket).await;
-    let listener = UnixListener::bind(&socket)
-        .with_context(|| format!("bind unix socket {}", socket.display()))?;
-    log_info!(SUB, "ipc listening path={}", socket.display());
+/// Convert an inbound IPC payload to the JSON-RPC notification text that gets
+/// broadcast to ws clients. Returns `None` for payloads that have no broadcast
+/// shape (e.g. `Ping`). Used both by the live IPC handler and by the
+/// queue-replay path at daemon startup.
+pub fn payload_to_broadcast(payload: IpcPayload) -> Result<Option<String>> {
+    match payload {
+        IpcPayload::AtMentioned {
+            file_path,
+            line_start,
+            line_end,
+        } => {
+            // IPC uses 1-indexed row numbers (matching $ZED_ROW). The Claude /ide
+            // protocol uses 0-indexed lines (per coder/claudecode.nvim reference),
+            // so convert here at the wire boundary.
+            let wire_start = line_start.saturating_sub(1);
+            let wire_end = line_end.saturating_sub(1);
+            let notif = JsonRpcNotification::new(
+                "at_mentioned",
+                AtMentioned {
+                    file_path: file_path.clone(),
+                    line_start: wire_start,
+                    line_end: wire_end,
+                },
+            );
+            log_info!(SUB, "at_mentioned file={file_path} start={wire_start} end={wire_end} (from 1-indexed {line_start}..{line_end})");
+            let text = serde_json::to_string(&notif)
+                .map_err(|err| anyhow!("serialize at_mentioned: {err}"))?;
+            Ok(Some(text))
+        }
+        IpcPayload::Ping => Ok(None),
+    }
+}
+
+pub async fn serve(listener: UnixListener, state: Arc<DaemonState>) -> Result<()> {
+    log_info!(SUB, "ipc accepting");
     loop {
         let (stream, _) = match listener.accept().await {
             Ok(v) => v,
@@ -58,38 +87,17 @@ async fn handle(stream: tokio::net::UnixStream, state: Arc<DaemonState>) -> Resu
             continue;
         }
         let reply = match serde_json::from_str::<IpcPayload>(&line) {
-            Ok(IpcPayload::AtMentioned {
-                file_path,
-                line_start,
-                line_end,
-            }) => {
-                // IPC uses 1-indexed row numbers (matching $ZED_ROW). The Claude /ide
-                // protocol uses 0-indexed lines (per coder/claudecode.nvim reference),
-                // so convert here at the wire boundary.
-                let wire_start = line_start.saturating_sub(1);
-                let wire_end = line_end.saturating_sub(1);
-                let notif = JsonRpcNotification::new(
-                    "at_mentioned",
-                    AtMentioned {
-                        file_path: file_path.clone(),
-                        line_start: wire_start,
-                        line_end: wire_end,
-                    },
-                );
-                log_info!(SUB, "at_mentioned file={file_path} start={wire_start} end={wire_end} (from 1-indexed {line_start}..{line_end})");
-                match serde_json::to_string(&notif) {
-                    Ok(text) => {
-                        let clients = state.tx.receiver_count();
-                        let _ = state.tx.send(text);
-                        IpcReply::Ok { clients }
-                    }
-                    Err(err) => IpcReply::Err {
-                        message: format!("serialize: {err}"),
-                    },
+            Ok(payload) => match payload_to_broadcast(payload) {
+                Ok(Some(text)) => {
+                    let clients = enqueue_and_maybe_drain(&state, text).await;
+                    IpcReply::Ok { clients }
                 }
-            }
-            Ok(IpcPayload::Ping) => IpcReply::Ok {
-                clients: state.tx.receiver_count(),
+                Ok(None) => IpcReply::Ok {
+                    clients: state.tx.receiver_count(),
+                },
+                Err(err) => IpcReply::Err {
+                    message: format!("serialize: {err}"),
+                },
             },
             Err(err) => IpcReply::Err {
                 message: format!("parse: {err}"),
@@ -100,4 +108,24 @@ async fn handle(stream: tokio::net::UnixStream, state: Arc<DaemonState>) -> Resu
         wr.write_all(b"\n").await?;
     }
     Ok(())
+}
+
+/// Push the broadcast text into the pending buffer (capped, oldest-evicting).
+/// If any ws subscriber is connected, drain pending into the broadcast channel
+/// in order so live messages always carry any backlog. Returns the receiver
+/// count observed at decision time (used for the `clients` field of IpcReply,
+/// which `zcc send` surfaces as the "no Claude attached" warning).
+pub async fn enqueue_and_maybe_drain(state: &Arc<DaemonState>, text: String) -> usize {
+    let mut pending = state.pending.lock().await;
+    pending.push_back(text);
+    while pending.len() > crate::daemon::PENDING_CAP {
+        pending.pop_front();
+    }
+    let clients = state.tx.receiver_count();
+    if clients > 0 {
+        for msg in pending.drain(..) {
+            let _ = state.tx.send(msg);
+        }
+    }
+    clients
 }
