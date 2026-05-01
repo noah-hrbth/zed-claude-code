@@ -66,8 +66,7 @@ pub fn run(worktree: PathBuf, file: PathBuf, row: u32, selection: String) -> Res
 /// concurrent writers from corrupting each other.
 fn enqueue(worktree: &std::path::Path, payload: &IpcPayload) -> Result<()> {
     let dir = crate::util::queue_dir(worktree)?;
-    std::fs::create_dir_all(&dir)
-        .with_context(|| format!("create queue dir {}", dir.display()))?;
+    std::fs::create_dir_all(&dir).with_context(|| format!("create queue dir {}", dir.display()))?;
     let path = dir.join(format!("{}.json", Uuid::new_v4()));
     let bytes = serde_json::to_vec(payload).context("serialize queue payload")?;
     std::fs::write(&path, &bytes)

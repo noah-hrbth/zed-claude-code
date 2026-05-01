@@ -68,10 +68,7 @@ pub async fn run(worktree: PathBuf) -> Result<()> {
     // path is stale (connect refused / no such file).
     let ipc_path = crate::util::ipc_socket_path(&worktree)?;
     if std::os::unix::net::UnixStream::connect(&ipc_path).is_ok() {
-        anyhow::bail!(
-            "another daemon already bound {}",
-            ipc_path.display()
-        );
+        anyhow::bail!("another daemon already bound {}", ipc_path.display());
     }
     let _ = tokio::fs::remove_file(&ipc_path).await;
     let ipc_listener = UnixListener::bind(&ipc_path)
