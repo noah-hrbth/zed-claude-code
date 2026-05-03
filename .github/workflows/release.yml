@@ -112,11 +112,87 @@ jobs:
     needs: release
     runs-on: ubuntu-latest
     steps:
+      # Custom replacement for dawidd6/action-homebrew-bump-formula. That action
+      # wraps `brew bump-formula-pr`, which doesn't reliably handle a multi-arch
+      # formula (separate `on_arm`/`on_intel` blocks with two URL+sha256 pairs):
+      # with `#{version}` interpolation in URLs, its inreplace can't find the
+      # literal old URL; with literal URLs, it gets confused about which block
+      # carries the canonical version. We sidestep both problems by regenerating
+      # the entire formula from the just-published release artifacts.
+      #
+      # All untrusted inputs (only github.ref_name here) flow through env vars
+      # and are quoted in shell — never interpolated directly into the script.
       - name: Open PR against noah-hrbth/homebrew-zcc
-        uses: dawidd6/action-homebrew-bump-formula@v7
-        with:
-          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          tap: noah-hrbth/homebrew-zcc
-          formula: zcc
-          tag: ${{ github.ref_name }}
-          force: false
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="${REF_NAME#v}"
+          repo_owner="noah-hrbth"
+          repo_name="zed-claude-code"
+          tap_repo="${repo_owner}/homebrew-zcc"
+
+          arm_url="https://github.com/${repo_owner}/${repo_name}/releases/download/${REF_NAME}/zcc-${version}-aarch64-apple-darwin.tar.gz"
+          intel_url="https://github.com/${repo_owner}/${repo_name}/releases/download/${REF_NAME}/zcc-${version}-x86_64-apple-darwin.tar.gz"
+
+          arm_sha=$(curl -fsSL "${arm_url}" | sha256sum | cut -d' ' -f1)
+          intel_sha=$(curl -fsSL "${intel_url}" | sha256sum | cut -d' ' -f1)
+          echo "arm_sha=${arm_sha}"
+          echo "intel_sha=${intel_sha}"
+
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/${tap_repo}.git" tap
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          branch="bump-zcc-${version}"
+          git checkout -b "${branch}"
+
+          cat > Formula/zcc.rb <<EOF
+          class Zcc < Formula
+            desc "Zed <-> Claude Code integration: send editor selection to Claude Code via /ide"
+            homepage "https://github.com/${repo_owner}/${repo_name}"
+            version "${version}"
+            license "MIT"
+
+            on_arm do
+              url "${arm_url}"
+              sha256 "${arm_sha}"
+            end
+
+            on_intel do
+              url "${intel_url}"
+              sha256 "${intel_sha}"
+            end
+
+            def install
+              bin.install "zcc"
+            end
+
+            def caveats
+              <<~EOS
+                To finish setup, run:
+                  zcc install
+
+                That merges an entry into your Zed tasks.json and keymap.json
+                so Cmd+L sends the editor selection to Claude Code.
+
+                Originals are backed up alongside each file as *.bak.
+              EOS
+            end
+
+            test do
+              assert_match "zcc #{version}", shell_output("#{bin}/zcc --version")
+              assert_match "Send the current editor selection", shell_output("#{bin}/zcc send --help")
+              assert_match "zcc doctor", shell_output("#{bin}/zcc doctor")
+            end
+          end
+          EOF
+
+          git add Formula/zcc.rb
+          git commit -m "zcc ${version}"
+          git push -u origin "${branch}"
+          gh pr create --base main --head "${branch}" \
+            --title "zcc ${version}" \
+            --body "Automated bump from ${REF_NAME} release."
