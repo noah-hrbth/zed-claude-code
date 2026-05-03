@@ -5,13 +5,13 @@ class Zcc < Formula
   license "MIT"
 
   on_arm do
-    url "https://github.com/noah-hrbth/zed-claude-code/releases/download/v#{version}/zcc-#{version}-aarch64-apple-darwin.tar.gz"
-    sha256 "55fd6b33452f3d4816f67ebf50c97d3a7b0a1d103eb9cb5dd91bea89e4e30e51"
+    url "https://github.com/noah-hrbth/zed-claude-code/releases/download/v0.2.0/zcc-0.2.0-aarch64-apple-darwin.tar.gz"
+    sha256 "0362590e476ee9e00eeff74bd3801cb9b82d6e8cb072eb5d28fb1a8227213795"
   end
 
   on_intel do
-    url "https://github.com/noah-hrbth/zed-claude-code/releases/download/v#{version}/zcc-#{version}-x86_64-apple-darwin.tar.gz"
-    sha256 "072f9a405c4957638869bbf7f9575fc571c65c22faf7deaba2c5bdd3a8c1938b"
+    url "https://github.com/noah-hrbth/zed-claude-code/releases/download/v0.2.0/zcc-0.2.0-x86_64-apple-darwin.tar.gz"
+    sha256 "725bb0fada08532d0e07b6aa9fafa2b60cd2c86e56f440866c474fe90b4ec615"
   end
 
   def install
