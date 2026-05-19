@@ -20,6 +20,7 @@ pub fn run() -> Result<()> {
         "keymap block with Cmd+L rendezvous",
     );
     check_claude_ide_dir();
+    check_runtime_dir();
     tail_log();
     Ok(())
 }
@@ -111,6 +112,55 @@ fn check_claude_ide_dir() {
         lockfiles.len(),
         mode,
         if perm_ok { "" } else { " (expected 700)" }
+    );
+}
+
+/// Read-only inspection of the private runtime dir. Recomputes the path inline
+/// rather than calling `util::runtime_dir()`, which would create+chmod it as a
+/// side effect during diagnostics.
+fn check_runtime_dir() {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+    let uid = crate::util::current_uid();
+    let base = std::env::var_os("TMPDIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from("/tmp"));
+    let dir = base.join(format!("zcc-{uid}"));
+    print!("  runtime dir ({})... ", dir.display());
+    let meta = match fs::symlink_metadata(&dir) {
+        Ok(m) => m,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            println!("not present yet (created on first send)");
+            return;
+        }
+        Err(err) => {
+            println!("stat failed: {err}");
+            return;
+        }
+    };
+    if !meta.file_type().is_dir() {
+        println!("NOT A DIRECTORY (possible squatting)");
+        return;
+    }
+    let mode = meta.permissions().mode() & 0o777;
+    let owner_ok = meta.uid() == uid;
+    let socks = fs::read_dir(&dir)
+        .ok()
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|e| {
+            let p = e.path();
+            let ext = p.extension().and_then(|s| s.to_str());
+            ext == Some("sock") || ext == Some("queue")
+        })
+        .count();
+    println!(
+        "mode {:o}{}{}, {} socket/queue entr{}",
+        mode,
+        if mode == 0o700 { "" } else { " (expected 700)" },
+        if owner_ok { "" } else { ", WRONG OWNER" },
+        socks,
+        if socks == 1 { "y" } else { "ies" }
     );
 }
 

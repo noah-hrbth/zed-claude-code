@@ -65,11 +65,24 @@ pub fn run(worktree: PathBuf, file: PathBuf, row: u32, selection: String) -> Res
 /// spawned daemon can broadcast it once it's up. One file per message keeps
 /// concurrent writers from corrupting each other.
 fn enqueue(worktree: &std::path::Path, payload: &IpcPayload) -> Result<()> {
+    use std::fs::{OpenOptions, Permissions};
+    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+    // queue_dir() resolves under the verified 0700 runtime dir; still pin the
+    // .queue subdir mode so daemon-side and `zcc doctor` checks agree
     let dir = crate::util::queue_dir(worktree)?;
     std::fs::create_dir_all(&dir).with_context(|| format!("create queue dir {}", dir.display()))?;
+    std::fs::set_permissions(&dir, Permissions::from_mode(0o700))
+        .with_context(|| format!("chmod 0700 {}", dir.display()))?;
     let path = dir.join(format!("{}.json", Uuid::new_v4()));
     let bytes = serde_json::to_vec(payload).context("serialize queue payload")?;
-    std::fs::write(&path, &bytes)
+    let mut f = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(&path)
+        .with_context(|| format!("create queue file {}", path.display()))?;
+    f.write_all(&bytes)
         .with_context(|| format!("write queue file {}", path.display()))?;
     Ok(())
 }

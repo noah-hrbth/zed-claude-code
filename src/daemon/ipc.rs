@@ -70,6 +70,20 @@ pub async fn serve(listener: UnixListener, state: Arc<DaemonState>) -> Result<()
                 continue;
             }
         };
+        // same-user-only: reject any peer whose uid != ours. zcc never drops
+        // privileges, so the peer's effective uid == our real uid; compare sound
+        let our_uid = crate::util::current_uid();
+        match stream.peer_cred() {
+            Ok(cred) if cred.uid() == our_uid => {}
+            Ok(cred) => {
+                log_warn!(SUB, "ipc rejecting peer uid={} (not {our_uid})", cred.uid());
+                continue;
+            }
+            Err(err) => {
+                log_warn!(SUB, "ipc peer_cred failed, rejecting: {err}");
+                continue;
+            }
+        }
         let state = Arc::clone(&state);
         tokio::spawn(async move {
             if let Err(err) = handle(stream, state).await {

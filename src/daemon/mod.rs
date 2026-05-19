@@ -2,6 +2,7 @@ use crate::{log_error, log_info, log_warn};
 use anyhow::{Context, Result};
 use std::collections::VecDeque;
 use std::net::SocketAddr;
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -73,6 +74,9 @@ pub async fn run(worktree: PathBuf) -> Result<()> {
     let _ = tokio::fs::remove_file(&ipc_path).await;
     let ipc_listener = UnixListener::bind(&ipc_path)
         .with_context(|| format!("bind unix socket {}", ipc_path.display()))?;
+    // defense-in-depth: don't rely on the parent dir's mode alone
+    std::fs::set_permissions(&ipc_path, std::fs::Permissions::from_mode(0o600))
+        .with_context(|| format!("chmod 0600 {}", ipc_path.display()))?;
 
     let auth_token = Uuid::new_v4().to_string();
     let (tx, _) = broadcast::channel::<String>(BROADCAST_CAP);
