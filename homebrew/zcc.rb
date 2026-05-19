@@ -31,7 +31,7 @@ class Zcc < Formula
   end
 
   test do
-    assert_match "zcc #{version}", shell_output("#{bin}/zcc --version")
+    assert_match "zcc #{version}", shell_output("#{bin}/zcc version")
     assert_match "Send the current editor selection", shell_output("#{bin}/zcc send --help")
     assert_match "zcc doctor", shell_output("#{bin}/zcc doctor")
   end

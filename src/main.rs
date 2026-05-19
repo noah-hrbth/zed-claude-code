@@ -12,7 +12,7 @@ mod send;
 mod util;
 
 #[derive(Parser)]
-#[command(name = "zcc", version, about = "Zed <-> Claude Code integration")]
+#[command(name = "zcc", about = "Zed <-> Claude Code integration")]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -50,6 +50,8 @@ enum Command {
     Uninstall,
     /// Check the installation and print diagnostics.
     Doctor,
+    /// Print the zcc version.
+    Version,
 }
 
 fn main() -> Result<()> {
@@ -60,6 +62,7 @@ fn main() -> Result<()> {
         Command::Install => "install",
         Command::Uninstall => "uninstall",
         Command::Doctor => "doctor",
+        Command::Version => "version",
     };
     let _ = logging::init(sub_name);
 
@@ -96,5 +99,9 @@ fn main() -> Result<()> {
         Command::Install => install::run(),
         Command::Uninstall => install::uninstall(),
         Command::Doctor => doctor::run(),
+        Command::Version => {
+            println!("zcc {}", env!("CARGO_PKG_VERSION"));
+            Ok(())
+        }
     }
 }
