@@ -196,3 +196,4 @@ jobs:
           gh pr create --base main --head "${branch}" \
             --title "zcc ${version}" \
             --body "Automated bump from ${REF_NAME} release."
+          gh pr merge "${branch}" --auto --squash --delete-branch
